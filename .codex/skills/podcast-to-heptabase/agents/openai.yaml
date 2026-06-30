@@ -1,0 +1,4 @@
+interface:
+  display_name: "Podcast to Heptabase"
+  short_description: "Turn podcast links into Heptabase notes on the Podcasts whiteboard."
+  default_prompt: "Turn this podcast link into a Markdown note, import it to Heptabase, and place it on the Podcasts whiteboard:"

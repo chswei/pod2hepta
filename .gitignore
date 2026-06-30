@@ -1,0 +1,17 @@
+.DS_Store
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Runtime scratch artifacts for podcast processing.
+work/
+outputs/
+
+# Local secrets and environment overrides.
+.env
+.env.*
+!.env.example
