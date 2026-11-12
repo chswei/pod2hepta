@@ -12,7 +12,8 @@ The skill lives at:
 
 - Resolves podcast episode audio from supported podcast platforms and RSS feeds.
 - Downloads and verifies audio in a disposable per-run workspace.
-- Transcribes episodes locally with Whisper-compatible tooling.
+- Prefers Colab GPU transcription through the independent `colab-gpu` skill and falls back to local Whisper when no usable GPU is available.
+- Downloads and validates transcripts, then releases Colab resources before synthesizing notes; also cleans up after failed or cancelled remote attempts.
 - Synthesizes concise Markdown study notes.
 - Imports notes into Heptabase with the Heptabase CLI.
 - Tags podcast notes and places them on the `Podcasts` whiteboard when available.
@@ -35,6 +36,7 @@ The skill defaults to Traditional Chinese notes when the request is written in C
 - Codex with local skills enabled
 - `uv` for Python package and script execution
 - `ffmpeg` / `ffprobe` for audio handling
+- For the preferred cloud path: the `colab-gpu` skill, official Colab CLI (`uv tool install google-colab-cli`), existing local Google authentication, and authorized compute units/GPU availability. Credentials stay in the local authentication store and are never included in this repository. If this path is unavailable, local transcription remains supported.
 - Heptabase CLI with CLI access enabled in Heptabase
 
 ## Repository Notes

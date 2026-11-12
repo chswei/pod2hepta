@@ -1,13 +1,13 @@
 ---
 name: podcast-to-heptabase
-description: Use when the user provides one or more podcast episode links from Apple Podcasts, Spotify, SoundOn, Firstory, Anchor, RSS feeds, or similar podcast platforms and wants Codex to download audio, transcribe it with Whisper or an equivalent local model, create Markdown notes, and import them into Heptabase with the Heptabase CLI.
+description: Use when the user provides podcast episode links and wants Heptabase notes. Resolve audio, prefer Colab GPU transcription through colab-gpu with automatic resource cleanup, fall back to local Whisper when a GPU is unavailable, and organize the resulting notes in Heptabase.
 ---
 
 # Podcast To Heptabase
 
 ## Overview
 
-Turn podcast episode links into durable Heptabase note cards: resolve the episode audio, download it, transcribe it locally, synthesize a Markdown study note, import it with `heptabase note create`, place the note on the `Podcasts` whiteboard when available, verify the card exists, and clean up local intermediate artifacts.
+Turn podcast episode links into durable Heptabase note cards: resolve and download audio, prefer Colab GPU transcription through `colab-gpu`, retrieve and validate the transcript, release the GPU, synthesize a Markdown study note, import it with `heptabase note create`, place it on the `Podcasts` whiteboard when available, and clean up local intermediate artifacts. Fall back to local Whisper when a usable Colab GPU is unavailable.
 
 Default to executing end to end. Ask only when the audio cannot be resolved, the user wants a different note style, or Heptabase CLI is unavailable/disabled.
 
@@ -15,6 +15,8 @@ Default to executing end to end. Ask only when the audio cannot be resolved, the
 
 - List the current directory before other work if local instructions require it.
 - Use `uv` for Python packages and scripts.
+- Follow `colab-gpu` for remote compute and local-only authentication. Never package credentials with this skill. Do not assume compute is free or purchase units, upgrade plans, or select more expensive hardware automatically.
+- Release every Colab session created for this run on success, failure, or cancellation, unless the user explicitly asks to keep it. Retrieve available results first; release the GPU before writing notes or waiting for Heptabase. Confirm release with `colab sessions` and report any cleanup failure.
 - Treat local files as disposable scratch data. Use a per-run temporary directory for raw audio, clips, transcripts, and Markdown import files, then remove it after the Heptabase card is verified.
 - Do not keep final Markdown notes in `outputs/` by default. The durable deliverable is the Heptabase note card.
 - Preserve local artifacts only when the user explicitly asks for local files, when debugging a failure, or when Heptabase import cannot complete. If artifacts are preserved, put them under `work/` or `outputs/` as appropriate and report the paths.
@@ -75,9 +77,15 @@ ffmpeg -y -hide_banner -loglevel error -ss 120 -t 60 -i "$tmp/<slug>.mp3" -ac 1 
 
 ### 4. Transcribe
 
-Use an existing official transcript when it is full-length and reliable. Otherwise transcribe locally.
+Use an existing official transcript when it is full-length and reliable, unless the user specifically wants to test transcription. Otherwise use this backend order:
 
-On Apple Silicon, prefer `mlx-whisper`:
+1. **Colab GPU first:** load the `colab-gpu` skill (on this Mac, `/Users/chswei/.codex/skills/colab-gpu/SKILL.md`) and follow [references/colab-transcription.md](references/colab-transcription.md). Prepare inputs and the worker locally, check usage/authentication, request a uniquely named T4 session, validate a short sample, then transcribe and download the episode. After local transcript validation, release the session immediately; do not keep it running for note synthesis or Heptabase import.
+2. **Local fallback:** if the skill/CLI is unavailable, authentication cannot be used without new user interaction, GPU allocation is denied/unavailable, or no usable CUDA device is present, clean up any session created by the attempt and continue locally. Also use local transcription when cloud upload or compute spending is outside the user's authorized scope. State the fallback reason briefly and continue without asking whether to use the local fallback already requested by the user.
+3. For a clear environment error, a bounded repair within the same allocated session and existing authorization is reasonable. If the GPU worker still cannot complete, save completed chunks, release its session, and continue locally for missing chunks. Do not repeatedly allocate GPUs, silently upgrade hardware, or redo validated chunks unnecessarily. Keep recoverable artifacts if both paths fail.
+
+#### Local fallback
+
+On Apple Silicon, prefer `mlx-whisper` through `uv`; do not run this example in addition to an already successful Colab transcription:
 
 ```bash
 uv run --with mlx-whisper python - <<'PY'
@@ -113,7 +121,7 @@ for slug, path in items:
 PY
 ```
 
-For non-Apple Silicon or if MLX fails, use `faster-whisper` or `openai-whisper` through `uv`. Run a one-minute clip first when language/model quality is uncertain.
+For non-Apple Silicon or if MLX fails, use `faster-whisper` or `openai-whisper` through `uv`. Run a one-minute clip first when language/model quality is uncertain. Use `task="transcribe"` to retain the original language; merge chunk timestamps into the episode timeline and inspect missing coverage, repetition, and out-of-range timestamps before writing notes.
 
 ### 5. Write Markdown Notes
 
@@ -167,6 +175,7 @@ Verify each card with `heptabase card list -q '<title>' --card-types note -l 5`.
 
 - Heptabase card IDs and titles
 - Tags applied and `Podcasts` whiteboard placement status
+- Actual transcription backend/hardware, whether Colab resources were released, and compute-unit usage when measurable (do not infer exact cost below the balance display precision)
 - Confirmation that local intermediate artifacts were cleaned up, or paths to preserved artifacts if cleanup was intentionally skipped
 - Any limitations, such as unavailable audio, missing transcript, noisy transcription, or incomplete Heptabase import
 
